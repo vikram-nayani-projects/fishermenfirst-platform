@@ -1,8 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    // Enable server actions
-    serverActions: true,
+    // Enable server actions (fixed for Next.js 15)
+    serverActions: {
+      allowedOrigins: ['localhost:3000', '*.vercel.app'],
+    },
   },
   // Supabase configuration
   env: {
