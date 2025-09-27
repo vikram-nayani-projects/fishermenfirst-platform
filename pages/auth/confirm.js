@@ -50,16 +50,16 @@ export default function AuthConfirm() {
           // Redirect based on user role
           switch (userData.role) {
             case 'vessel':
-              router.push('/vessel-dashboard')
+              router.push('/dashboard')
               break
             case 'tem_manager':
-              router.push('/tem-dashboard')
+              router.push('/dashboard')
               break
             case 'rockfish_manager':
-              router.push('/rockfish-dashboard')
+              router.push('/dashboard')
               break
             case 'admin':
-              router.push('/admin-dashboard')
+              router.push('/admin')
               break
             default:
               router.push('/dashboard')
