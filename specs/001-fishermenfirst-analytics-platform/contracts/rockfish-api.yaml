@@ -1,0 +1,766 @@
+openapi: 3.0.3
+info:
+  title: Rockfish Program API
+  description: API for Rockfish program operations including quota management and transfers
+  version: 1.0.0
+  contact:
+    name: FishermenFirst Platform
+    email: support@fishermenfirst.org
+
+servers:
+  - url: /api/rockfish
+    description: Rockfish API endpoints
+
+security:
+  - BearerAuth: []
+
+paths:
+  /quotas/{vesselId}:
+    get:
+      summary: Get vessel quota allocations
+      description: Returns current quota allocations and usage for a vessel
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: seasonYear
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 2022
+        - name: speciesCode
+          in: query
+          schema:
+            type: string
+            enum: [POP, NORF, DUSKY]
+      responses:
+        '200':
+          description: Vessel quota information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselQuotaResponse'
+        '403':
+          description: Access denied to vessel quota data
+        '404':
+          description: Vessel not found
+
+  /quotas/{vesselId}/alerts:
+    get:
+      summary: Get quota usage alerts
+      description: Returns current alert status for vessel quotas
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: seasonYear
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Quota alert information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaAlertsResponse'
+
+  /transfers:
+    post:
+      summary: Request quota transfer
+      description: Submit a quota transfer request between vessels
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '201':
+          description: Transfer request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          description: Invalid transfer request
+        '403':
+          description: Not authorized for transfer
+
+    get:
+      summary: List transfers
+      description: Get transfers for vessels accessible to current user
+      parameters:
+        - name: vesselId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED, COMPLETED]
+        - name: seasonYear
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transfer'
+
+  /transfers/{transferId}/approve:
+    post:
+      summary: Approve quota transfer
+      description: Manager approval for quota transfer request
+      parameters:
+        - name: transferId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferApprovalRequest'
+      responses:
+        '200':
+          description: Transfer approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '403':
+          description: Not authorized to approve transfers
+        '404':
+          description: Transfer not found
+
+  /transfers/validate:
+    post:
+      summary: Validate transfer request
+      description: Check if a transfer request meets all business rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferValidationRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferValidationResponse'
+
+  /landings/{vesselId}:
+    get:
+      summary: Get vessel landings
+      description: Returns landing history for a vessel
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: seasonYear
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: speciesCode
+          in: query
+          schema:
+            type: string
+            enum: [POP, NORF, DUSKY]
+        - name: includeOverages
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Vessel landing data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselLandingsResponse'
+
+  /salmon-bycatch:
+    get:
+      summary: Get salmon bycatch tracking
+      description: Returns fleet-wide salmon bycatch data
+      parameters:
+        - name: seasonYear
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: vesselId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Salmon bycatch data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalmonBycatchResponse'
+
+  /allocations:
+    post:
+      summary: Create initial quota allocations
+      description: Manager function to set up quota allocations for a season
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllocationRequest'
+      responses:
+        '201':
+          description: Allocations created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllocationResponse'
+        '403':
+          description: Not authorized to create allocations
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    VesselQuotaResponse:
+      type: object
+      required:
+        - vesselId
+        - seasonYear
+        - quotas
+        - totalUsed
+        - totalRemaining
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        vesselName:
+          type: string
+        seasonYear:
+          type: integer
+        quotas:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotaAllocation'
+        totalUsed:
+          type: integer
+        totalRemaining:
+          type: integer
+        lastUpdated:
+          type: string
+          format: date-time
+
+    QuotaAllocation:
+      type: object
+      required:
+        - speciesCode
+        - speciesName
+        - initialAllocation
+        - currentAllocation
+        - usedPounds
+        - remainingPounds
+      properties:
+        speciesCode:
+          type: string
+          enum: [POP, NORF, DUSKY]
+        speciesName:
+          type: string
+        initialAllocation:
+          type: integer
+          minimum: 0
+        currentAllocation:
+          type: integer
+          minimum: 0
+        usedPounds:
+          type: integer
+          minimum: 0
+        remainingPounds:
+          type: integer
+        percentageUsed:
+          type: number
+          format: decimal
+          minimum: 0
+          maximum: 100
+        alertLevel:
+          type: string
+          enum: [NONE, WARNING_80, WARNING_90, CRITICAL_95, EXCEEDED]
+
+    QuotaAlertsResponse:
+      type: object
+      required:
+        - vesselId
+        - seasonYear
+        - alerts
+        - hasActiveAlerts
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        seasonYear:
+          type: integer
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotaAlert'
+        hasActiveAlerts:
+          type: boolean
+        lastChecked:
+          type: string
+          format: date-time
+
+    QuotaAlert:
+      type: object
+      required:
+        - speciesCode
+        - alertLevel
+        - percentageUsed
+        - remainingPounds
+        - isActive
+      properties:
+        speciesCode:
+          type: string
+          enum: [POP, NORF, DUSKY]
+        alertLevel:
+          type: string
+          enum: [WARNING_80, WARNING_90, CRITICAL_95, EXCEEDED]
+        percentageUsed:
+          type: number
+          format: decimal
+        remainingPounds:
+          type: integer
+        isActive:
+          type: boolean
+        triggeredAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    TransferRequest:
+      type: object
+      required:
+        - fromVesselId
+        - toVesselId
+        - speciesCode
+        - transferType
+        - pounds
+        - seasonYear
+      properties:
+        fromVesselId:
+          type: string
+          format: uuid
+        toVesselId:
+          type: string
+          format: uuid
+        speciesCode:
+          type: string
+          enum: [POP, NORF, DUSKY]
+        transferType:
+          type: string
+          enum: [LEASE, PERMANENT, OVERAGE_COVER]
+        pounds:
+          type: integer
+          minimum: 1
+        seasonYear:
+          type: integer
+        notes:
+          type: string
+          maxLength: 500
+
+    TransferResponse:
+      type: object
+      required:
+        - transferId
+        - status
+        - requestedAt
+      properties:
+        transferId:
+          type: string
+          format: uuid
+        fromVesselId:
+          type: string
+          format: uuid
+        toVesselId:
+          type: string
+          format: uuid
+        speciesCode:
+          type: string
+        transferType:
+          type: string
+          enum: [LEASE, PERMANENT, OVERAGE_COVER]
+        pounds:
+          type: integer
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, COMPLETED]
+        requestedAt:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+        approvedBy:
+          type: string
+          format: uuid
+        notes:
+          type: string
+
+    Transfer:
+      type: object
+      required:
+        - id
+        - fromVesselId
+        - toVesselId
+        - speciesCode
+        - transferType
+        - pounds
+        - status
+        - requestedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        fromVesselId:
+          type: string
+          format: uuid
+        fromVesselName:
+          type: string
+        toVesselId:
+          type: string
+          format: uuid
+        toVesselName:
+          type: string
+        speciesCode:
+          type: string
+          enum: [POP, NORF, DUSKY]
+        transferType:
+          type: string
+          enum: [LEASE, PERMANENT, OVERAGE_COVER]
+        pounds:
+          type: integer
+        seasonYear:
+          type: integer
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, COMPLETED]
+        requestedAt:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+        approvedBy:
+          type: string
+          format: uuid
+        effectiveAt:
+          type: string
+          format: date-time
+        notes:
+          type: string
+
+    TransferApprovalRequest:
+      type: object
+      properties:
+        approved:
+          type: boolean
+        notes:
+          type: string
+          maxLength: 500
+
+    TransferValidationRequest:
+      type: object
+      required:
+        - fromVesselId
+        - toVesselId
+        - speciesCode
+        - pounds
+        - transferType
+      properties:
+        fromVesselId:
+          type: string
+          format: uuid
+        toVesselId:
+          type: string
+          format: uuid
+        speciesCode:
+          type: string
+          enum: [POP, NORF, DUSKY]
+        pounds:
+          type: integer
+          minimum: 1
+        transferType:
+          type: string
+          enum: [LEASE, PERMANENT, OVERAGE_COVER]
+        seasonYear:
+          type: integer
+
+    TransferValidationResponse:
+      type: object
+      required:
+        - isValid
+        - errors
+        - warnings
+      properties:
+        isValid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationMessage'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationMessage'
+        fromVesselQuota:
+          $ref: '#/components/schemas/QuotaCheck'
+        toVesselQuota:
+          $ref: '#/components/schemas/QuotaCheck'
+
+    ValidationMessage:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        field:
+          type: string
+
+    QuotaCheck:
+      type: object
+      required:
+        - vesselId
+        - currentAllocation
+        - remainingAfterTransfer
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        currentAllocation:
+          type: integer
+        usedPounds:
+          type: integer
+        remainingPounds:
+          type: integer
+        remainingAfterTransfer:
+          type: integer
+        exceedsCapacity:
+          type: boolean
+
+    VesselLandingsResponse:
+      type: object
+      required:
+        - vesselId
+        - seasonYear
+        - landings
+        - totalPounds
+        - overageCount
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        seasonYear:
+          type: integer
+        landings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RockfishLanding'
+        totalPounds:
+          type: integer
+        overageCount:
+          type: integer
+        totalOveragePounds:
+          type: integer
+
+    RockfishLanding:
+      type: object
+      required:
+        - id
+        - speciesCode
+        - landingDate
+        - pounds
+        - isOverage
+      properties:
+        id:
+          type: string
+          format: uuid
+        speciesCode:
+          type: string
+          enum: [POP, NORF, DUSKY]
+        landingDate:
+          type: string
+          format: date
+        pounds:
+          type: integer
+        landingPort:
+          type: string
+        isOverage:
+          type: boolean
+        overageResolved:
+          type: boolean
+        resolutionNotes:
+          type: string
+        processedAt:
+          type: string
+          format: date-time
+
+    SalmonBycatchResponse:
+      type: object
+      required:
+        - seasonYear
+        - fleetTotal
+        - fleetCap
+        - percentageUsed
+        - vesselsWithBycatch
+      properties:
+        seasonYear:
+          type: integer
+        fleetTotal:
+          type: integer
+        fleetCap:
+          type: integer
+          default: 1200
+        percentageUsed:
+          type: number
+          format: decimal
+        vesselsWithBycatch:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselBycatch'
+        lastUpdated:
+          type: string
+          format: date-time
+
+    VesselBycatch:
+      type: object
+      required:
+        - vesselId
+        - vesselName
+        - chinookCount
+        - cohoCount
+        - lastReported
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        vesselName:
+          type: string
+        chinookCount:
+          type: integer
+        cohoCount:
+          type: integer
+        lastReported:
+          type: string
+          format: date
+
+    AllocationRequest:
+      type: object
+      required:
+        - seasonYear
+        - allocations
+      properties:
+        seasonYear:
+          type: integer
+        cooperativeId:
+          type: string
+          format: uuid
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselAllocation'
+
+    VesselAllocation:
+      type: object
+      required:
+        - vesselId
+        - quotas
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        quotas:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpeciesQuota'
+
+    SpeciesQuota:
+      type: object
+      required:
+        - speciesCode
+        - pounds
+      properties:
+        speciesCode:
+          type: string
+          enum: [POP, NORF, DUSKY]
+        pounds:
+          type: integer
+          minimum: 0
+
+    AllocationResponse:
+      type: object
+      required:
+        - seasonYear
+        - totalAllocations
+        - createdAt
+      properties:
+        seasonYear:
+          type: integer
+        totalAllocations:
+          type: integer
+        totalVessels:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselAllocation'
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

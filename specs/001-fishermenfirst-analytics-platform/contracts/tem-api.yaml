@@ -1,0 +1,465 @@
+openapi: 3.0.3
+info:
+  title: TEM Program API
+  description: API for TEM (pollock) program operations
+  version: 1.0.0
+  contact:
+    name: FishermenFirst Platform
+    email: support@fishermenfirst.org
+
+servers:
+  - url: /api/tem
+    description: TEM API endpoints
+
+security:
+  - BearerAuth: []
+
+paths:
+  /trip-average/{vesselId}:
+    get:
+      summary: Calculate 4-trip average for vessel
+      description: Calculates the current 4-trip average for vessels ≥60ft
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: seasonYear
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 2019
+        - name: seasonType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [A_SEASON, B_SEASON]
+      responses:
+        '200':
+          description: Trip average calculation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripAverageResponse'
+        '400':
+          description: Invalid request parameters
+        '403':
+          description: Access denied to vessel data
+        '404':
+          description: Vessel not found
+
+  /calendar-day-total/{vesselId}:
+    get:
+      summary: Calculate calendar day totals for vessel
+      description: Calculates calendar day groupings for vessels <60ft
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: seasonYear
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 2019
+        - name: seasonType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [A_SEASON, B_SEASON]
+      responses:
+        '200':
+          description: Calendar day calculation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarDayResponse'
+
+  /violations/{vesselId}:
+    get:
+      summary: Get violations for vessel
+      description: Returns all violations for the specified vessel
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: seasonYear
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, RESOLVED, APPEALED, DISMISSED]
+      responses:
+        '200':
+          description: List of violations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Violation'
+
+  /reports/compliance:
+    get:
+      summary: Generate compliance report
+      description: Generates compliance reports for regulatory submission
+      parameters:
+        - name: seasonYear
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: seasonType
+          in: query
+          schema:
+            type: string
+            enum: [A_SEASON, B_SEASON]
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, pdf]
+            default: json
+      responses:
+        '200':
+          description: Compliance report data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceReport'
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /landing-corrections:
+    post:
+      summary: Submit landing correction
+      description: Submit correction for existing landing data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LandingCorrectionRequest'
+      responses:
+        '201':
+          description: Correction submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandingCorrectionResponse'
+        '400':
+          description: Invalid correction data
+        '403':
+          description: Not authorized to correct this landing
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TripAverageResponse:
+      type: object
+      required:
+        - vesselId
+        - calculationDate
+        - tripGroups
+        - hasViolations
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        calculationDate:
+          type: string
+          format: date
+        tripGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/TripGroup'
+        hasViolations:
+          type: boolean
+        totalTrips:
+          type: integer
+        seasonYear:
+          type: integer
+        seasonType:
+          type: string
+          enum: [A_SEASON, B_SEASON]
+
+    TripGroup:
+      type: object
+      required:
+        - startDate
+        - endDate
+        - tripCount
+        - totalPounds
+        - averagePounds
+        - isViolation
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        tripCount:
+          type: integer
+          minimum: 1
+        totalPounds:
+          type: integer
+          minimum: 0
+        averagePounds:
+          type: number
+          format: decimal
+        isViolation:
+          type: boolean
+        violationThreshold:
+          type: integer
+          default: 300000
+        landingIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    CalendarDayResponse:
+      type: object
+      required:
+        - vesselId
+        - calculationDate
+        - dayGroups
+        - hasViolations
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        calculationDate:
+          type: string
+          format: date
+        dayGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarDayGroup'
+        hasViolations:
+          type: boolean
+        totalDays:
+          type: integer
+        seasonYear:
+          type: integer
+        seasonType:
+          type: string
+          enum: [A_SEASON, B_SEASON]
+
+    CalendarDayGroup:
+      type: object
+      required:
+        - date
+        - deliveryCount
+        - totalPounds
+        - isViolation
+      properties:
+        date:
+          type: string
+          format: date
+        deliveryCount:
+          type: integer
+          minimum: 2
+        totalPounds:
+          type: integer
+          minimum: 0
+        isViolation:
+          type: boolean
+        landingIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    Violation:
+      type: object
+      required:
+        - id
+        - vesselId
+        - violationDate
+        - averagePounds
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        vesselId:
+          type: string
+          format: uuid
+        violationDate:
+          type: string
+          format: date
+        averagePounds:
+          type: number
+          format: decimal
+        penaltyAmount:
+          type: number
+          format: decimal
+        violationNumber:
+          type: integer
+        status:
+          type: string
+          enum: [PENDING, RESOLVED, APPEALED, DISMISSED]
+        resolutionDate:
+          type: string
+          format: date
+        resolutionNotes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ComplianceReport:
+      type: object
+      required:
+        - reportDate
+        - seasonYear
+        - totalVessels
+        - totalLandings
+        - totalViolations
+      properties:
+        reportDate:
+          type: string
+          format: date-time
+        seasonYear:
+          type: integer
+        seasonType:
+          type: string
+          enum: [A_SEASON, B_SEASON]
+        totalVessels:
+          type: integer
+        totalLandings:
+          type: integer
+        totalViolations:
+          type: integer
+        violationsByVessel:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselViolationSummary'
+        reportPeriod:
+          $ref: '#/components/schemas/DateRange'
+
+    VesselViolationSummary:
+      type: object
+      required:
+        - vesselId
+        - vesselName
+        - violationCount
+        - totalPenalties
+      properties:
+        vesselId:
+          type: string
+          format: uuid
+        vesselName:
+          type: string
+        registrationNumber:
+          type: string
+        violationCount:
+          type: integer
+        totalPenalties:
+          type: number
+          format: decimal
+        lastViolationDate:
+          type: string
+          format: date
+
+    LandingCorrectionRequest:
+      type: object
+      required:
+        - originalLandingId
+        - correctedPounds
+        - reason
+      properties:
+        originalLandingId:
+          type: string
+          format: uuid
+        correctedPounds:
+          type: integer
+          minimum: 1
+        correctedDate:
+          type: string
+          format: date
+        reason:
+          type: string
+          maxLength: 500
+        supportingDocuments:
+          type: array
+          items:
+            type: string
+
+    LandingCorrectionResponse:
+      type: object
+      required:
+        - correctionId
+        - originalLandingId
+        - newLandingId
+        - status
+      properties:
+        correctionId:
+          type: string
+          format: uuid
+        originalLandingId:
+          type: string
+          format: uuid
+        newLandingId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [SUBMITTED, PROCESSING, COMPLETED, REJECTED]
+        submittedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+        recalculationTriggered:
+          type: boolean
+
+    DateRange:
+      type: object
+      required:
+        - startDate
+        - endDate
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
