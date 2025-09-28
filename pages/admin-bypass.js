@@ -2,11 +2,6 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/router'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
 export default function AdminBypass() {
   const [loading, setLoading] = useState(false)
   const [testResults, setTestResults] = useState({})
@@ -30,6 +25,10 @@ export default function AdminBypass() {
     setLoading(true)
     try {
       // Test database access
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
       const { data: landings } = await supabase
         .from('tem_pollock_landings')
         .select('*')
