@@ -40,24 +40,18 @@ export default function Home() {
   async function signIn() {
     const email = prompt('Enter your email:')
     if (email) {
-      try {
-        const response = await fetch('/api/auth/magic-link', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ email })
-        })
-
-        const result = await response.json()
-
-        if (response.ok) {
-          alert('Check your email for the magic link!')
-        } else {
-          alert('Error: ' + result.error)
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,  // Only allow existing users
+          emailRedirectTo: `${window.location.origin}/auth/confirm`
         }
-      } catch (error) {
+      })
+
+      if (error) {
         alert('Error: ' + error.message)
+      } else {
+        alert('Check your email for the magic link!')
       }
     }
   }
